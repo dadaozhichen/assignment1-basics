@@ -1,13 +1,16 @@
 import regex as re 
 from typing import BinaryIO
 from tqdm import tqdm 
+import multiprocessing
 import os  
 
+
+
 class TokenizerTrainer():
-    def __init__(self,file_path,vacab_size,special_tokens,processor_num) -> None:
+    def __init__(self,file_path,vocab_size,special_tokens,processor_num=16) -> None:
         self.file_path = file_path
-        self.vocab_size = vacab_size
-        self.special_tokens = special_tokens
+        self.vocab_size = vocab_size if vocab_size else 512 
+        self.special_tokens = special_tokens if special_tokens else [] 
         self.processor_num = processor_num
 
         #inistalize vocabulary 
@@ -78,14 +81,14 @@ class TokenizerTrainer():
             PAT = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
 
             boundaries = self.find_chunk_boundaries(f,self.processor_num,b"<|endoftext|>")
-
+            i=0
             for start,end in zip(boundaries[:-1],boundaries[1:]):
                 f.seek(start)
                 chunk = f.read(end-start).decode("utf-8",errors="ignore")
 
                 splited_chunk = re.split(concat_special_token,chunk)
 
-                i=0
+                
                 for seg in splited_chunk: #pre tokenization
                     pre_token_iter = re.finditer(PAT,seg)
                     for pre_token in pre_token_iter:
@@ -121,7 +124,7 @@ class TokenizerTrainer():
 
 
     def merge_bpe(self):
-        pair = max(self.bp_freq,key=lambda x:(self.bp_freq[x][0],self.vocab[x[0]],self.vocab[x[1]]))  #pair : tuple(str,str) 
+        pair = max(self.bp_freq,key=lambda x:(self.bp_freq[x][0],self.vocab[x[0]],self.vocab[x[1]]))  #pair : tuple(int,int) 
         index1,index2 = pair
         new_index = len(self.vocab)
         self.vocab[new_index] = self.vocab[index1] + self.vocab[index2]
@@ -134,7 +137,7 @@ class TokenizerTrainer():
     def merge(self,pair,new_index):
         have_pair_tokens = self.bp_freq[pair][1]
         for have_pair_token_index in have_pair_tokens:
-            bytestr = self.pre_tokens[have_pair_token_index]
+            bytestr = self.pre_tokens[have_pair_token_index][0]
             new_pre_token = bytestr 
 
             i=0
@@ -164,7 +167,7 @@ class TokenizerTrainer():
                             self.bp_freq[new_pair][0] += pre_count
                             if not self.bp_freq[new_pair][1] or self.bp_freq[new_pair][1][-1]!=have_pair_token_index:
                                 self.bp_freq[new_pair][1].append(have_pair_token_index)
-                        overlap_pair = (new_pre_token[i+2],pair[1])
+                        overlap_pair = (pair[1],new_pre_token[i+2])
                         self.bp_freq[overlap_pair][0] -= pre_count
                         if self.bp_freq[overlap_pair][0] <= 0:
                             self.bp_freq.pop(overlap_pair)
