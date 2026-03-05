@@ -7,7 +7,7 @@ import os
 
 
 class TokenizerTrainer():
-    def __init__(self,file_path,vocab_size,special_tokens,processor_num=16) -> None:
+    def __init__(self,file_path,vocab_size,special_tokens,processor_num=20) -> None:
         self.file_path = file_path
         self.vocab_size = vocab_size if vocab_size else 512 
         self.special_tokens = special_tokens if special_tokens else [] 
