@@ -6,9 +6,10 @@ from typing import IO, Any, BinaryIO
 
 import numpy.typing as npt
 import torch
+import torch.nn as nn
 from jaxtyping import Bool, Float, Int
 from torch import Tensor
-
+from einops import rearrange
 
 def run_linear(
     d_in: int,
@@ -28,8 +29,10 @@ def run_linear(
     Returns:
         Float[Tensor, "... d_out"]: The transformed output of your linear module.
     """
-
-    raise NotImplementedError
+    from cs336_basic import Linear
+    weights = rearrange(weights,"d_out d_in -> d_in d_out")
+    linear = Linear(d_in,d_out,weights)
+    return linear(in_features)
 
 
 def run_embedding(
@@ -50,8 +53,9 @@ def run_embedding(
     Returns:
         Float[Tensor, "... d_model"]: Batch of embeddings returned by your Embedding layer.
     """
-
-    raise NotImplementedError
+    from cs336_basic import Embedding
+    embedding = Embedding(vocab_size,d_model,weights)
+    return embedding(token_ids)
 
 
 def run_swiglu(
@@ -560,7 +564,7 @@ def get_tokenizer(
         A BPE tokenizer that uses the provided vocab, merges, and special tokens.
     """
 
-    from cs336_basics import Tokenizer
+    from cs336_basic import Tokenizer
     tokenizer = Tokenizer(vocab,merges,special_tokens)
     return tokenizer
 
@@ -592,6 +596,6 @@ def run_train_bpe(
                 representing that <token1> was merged with <token2>.
                 Merges are ordered by order of creation.
     """
-    from cs336_basics import TokenizerTrainer
+    from cs336_basic import TokenizerTrainer
     Trainer = TokenizerTrainer(input_path,vocab_size,special_tokens)
     return Trainer.train_bpe() 

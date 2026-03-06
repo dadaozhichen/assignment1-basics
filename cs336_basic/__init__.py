@@ -4,5 +4,7 @@ __version__ = importlib.metadata.version("cs336_basics")
 
 from .pretokenization import TokenizerTrainer
 from .tokenizer import Tokenizer
+from .linear import Linear
+from .embedding import Embedding 
 
-__all__ = ['TokenizerTrainer','Tokenizer']
+__all__ = ['TokenizerTrainer','Tokenizer','Linear','Embedding']
