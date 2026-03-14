@@ -10,9 +10,9 @@ class Linear(nn.Module):
         if weights is not None:
             self.weights = nn.Parameter(weights)
         else:
-            self.weights = nn.Parameter(torch.zeros(in_feature,out_feature))
+            self.weights = nn.Parameter(torch.zeros(out_feature,in_feature))
             sigma = 2/(in_feature+out_feature)
             nn.init.trunc_normal_(self.weights,0,sigma,-math.sqrt(sigma),math.sqrt(sigma))
     
     def forward(self,x:torch.Tensor):
-        return einsum(self.weights,x,"d_in d_out , ... d_in -> ... d_out")
+        return einsum(self.weights,x,"d_out d_in , ... d_in -> ... d_out")

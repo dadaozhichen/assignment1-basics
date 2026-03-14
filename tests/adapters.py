@@ -9,7 +9,7 @@ import torch
 import torch.nn as nn
 from jaxtyping import Bool, Float, Int
 from torch import Tensor
-from einops import rearrange
+from einops import rearrange,repeat
 
 def run_linear(
     d_in: int,
@@ -30,7 +30,6 @@ def run_linear(
         Float[Tensor, "... d_out"]: The transformed output of your linear module.
     """
     from cs336_basic import Linear
-    weights = rearrange(weights,"d_out d_in -> d_in d_out")
     linear = Linear(d_in,d_out,weights)
     return linear(in_features)
 
@@ -110,7 +109,9 @@ def run_scaled_dot_product_attention(
     Returns:
         Float[Tensor, " ... queries d_v"]: Output of SDPA
     """
-    raise NotImplementedError
+    from cs336_basic import ScaleDotProductAttention
+
+    return ScaleDotProductAttention(Q,K,V,mask) 
 
 
 def run_multihead_self_attention(
@@ -144,7 +145,27 @@ def run_multihead_self_attention(
         Float[Tensor, " ... sequence_length d_out"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
-    raise NotImplementedError
+    from cs336_basic import Linear
+    d_k ,d_in = q_proj_weight.shape 
+    d_v = v_proj_weight.shape[0]
+
+    q = Linear(d_in,d_k,q_proj_weight)(in_features)
+
+    k = Linear(d_in,d_k,k_proj_weight)(in_features)
+    v = Linear(d_in,d_k,v_proj_weight)(in_features)
+
+    q = q.view(q.shape[:-1]+(num_heads,-1)).transpose(1,2)
+    k = k.view(k.shape[:-1]+(num_heads,-1)).transpose(1,2)
+    v = v.view(v.shape[:-1]+(num_heads,-1)).transpose(1,2)
+
+    seq_len = q.shape[2]
+    mask = torch.tril(torch.ones(seq_len,seq_len)).bool()
+    attn_out = run_scaled_dot_product_attention(q,k,v,mask)
+    attn_out = attn_out.permute(0,2,1,3).contiguous()
+    attn_out = attn_out.view(attn_out.shape[:-2] + (d_v,))   
+
+    out = run_linear(d_v, d_model, o_proj_weight, attn_out)
+    return out
 
 
 def run_multihead_self_attention_with_rope(
@@ -184,7 +205,38 @@ def run_multihead_self_attention_with_rope(
         Float[Tensor, " ... sequence_length d_out"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
-    raise NotImplementedError
+    d_k, d_in = q_proj_weight.shape
+    d_v = v_proj_weight.shape[0]
+    seq_len = in_features.shape[-2]
+
+    q = run_linear(d_in, d_k, q_proj_weight, in_features)
+    k = run_linear(d_in, d_k, k_proj_weight, in_features)
+    v = run_linear(d_in, d_v, v_proj_weight, in_features)   # B, T, d_v // nh
+
+    q = q.view(q.shape[:-1] + (num_heads, -1))   # B, T, nh, d_k // nh
+    k = k.view(k.shape[:-1] + (num_heads, -1))
+    v = v.view(v.shape[:-1] + (num_heads, -1))   # B, T, nh, d_v // nh
+
+    q = q.permute(0, 2, 1, 3)   # B, nh, T, d_k // nh
+    k = k.permute(0, 2, 1, 3)
+    v = v.permute(0, 2, 1, 3)   # B, nh, T, d_v // nh
+
+    # rope
+    if token_positions is not None:
+        q = run_rope(d_k // num_heads, theta, seq_len, q, token_positions)
+        k = run_rope(d_k // num_heads, theta, seq_len, k, token_positions)
+
+    # casual mask
+    mask = torch.tril(torch.ones(seq_len, seq_len)).bool()
+    attn_out = run_scaled_dot_product_attention(q, k, v, mask) # B, nh, T, d_v // nh
+
+    attn_out = attn_out.permute(0, 2, 1, 3) # B, T, nh, d_v // nh
+    attn_out = attn_out.contiguous()
+    attn_out = attn_out.view(attn_out.shape[:-2] + (d_v,))    # B, T, d_v
+
+    out = run_linear(d_v, d_model, o_proj_weight, attn_out)
+
+    return out
 
 
 def run_rope(
@@ -206,7 +258,9 @@ def run_rope(
     Returns:
         Float[Tensor, " ... sequence_length d_k"]: Tensor with RoPEd input.
     """
-    raise NotImplementedError
+    from cs336_basic import RoPE 
+    rope= RoPE(theta,d_k,max_seq_len)
+    return rope(in_query_or_key,token_positions)
 
 
 def run_transformer_block(
@@ -439,7 +493,9 @@ def run_softmax(in_features: Float[Tensor, " ..."], dim: int) -> Float[Tensor, "
         Float[Tensor, "..."]: Tensor of with the same shape as `in_features` with the output of
         softmax normalizing the specified `dim`.
     """
-    raise NotImplementedError
+    from cs336_basic import softmax
+    f1 = softmax(dim)
+    return f1(in_features)
 
 
 def run_cross_entropy(
